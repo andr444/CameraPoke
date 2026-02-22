@@ -191,8 +191,38 @@
     .btn-secondary:not(:disabled):hover { background: #2e4d8a; transform: translateY(-1px); }
     .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
     .btn-ghost:not(:disabled):hover { background: var(--surface2); color: var(--text); }
-    .btn-identify { background: linear-gradient(135deg, #ff6b35, #ff3d00); color: white; width: 100%; padding: 13px; font-size: 0.95rem; border-radius: 10px; display: none; }
-    .btn-identify:not(:disabled):hover { opacity: 0.9; transform: translateY(-1px); }
+    /* Inline identify button in panel header */
+    .panel-header { display: flex; align-items: center; justify-content: space-between; }
+    #identifyBtn {
+      padding: 6px 16px; border-radius: 8px; border: none;
+      background: linear-gradient(135deg, #ff6b35, #ff3d00);
+      color: white; font-size: 0.8rem; font-weight: 700;
+      cursor: pointer; transition: all 0.15s;
+      opacity: 0.35; pointer-events: none;
+    }
+    #identifyBtn.ready { opacity: 1; pointer-events: auto; }
+    #identifyBtn.ready:hover { opacity: 0.88; transform: translateY(-1px); }
+
+    /* Collapsed key row */
+    .key-collapsed { display: flex; align-items: center; gap: 10px; }
+    .key-collapsed span { font-size: 0.85rem; color: var(--success); }
+
+    /* Spec sheet card details */
+    .spec-section { display: flex; flex-direction: column; }
+    .spec-section-title { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 1px; color: #444; margin-bottom: 4px; margin-top: 12px; }
+    .spec-row { display: flex; justify-content: space-between; align-items: baseline; padding: 5px 0; border-bottom: 1px solid #1a1a24; }
+    .spec-row:last-child { border-bottom: none; }
+    .spec-key { font-size: 0.75rem; color: var(--muted); flex-shrink: 0; }
+    .spec-val { font-size: 0.82rem; font-weight: 600; text-align: right; }
+
+    /* Attacks */
+    .attack-item { background: var(--surface2); border-radius: 8px; padding: 8px 10px; display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 6px; }
+    .attack-name { font-size: 0.8rem; font-weight: 700; }
+    .attack-meta { font-size: 0.7rem; color: #666; margin-top: 2px; }
+    .attack-damage { font-size: 1rem; font-weight: 800; color: var(--accent); white-space: nowrap; }
+
+    /* Card result item wrapper (multi-card ready) */
+    .card-result-item { display: flex; flex-direction: column; gap: 10px; width: 100%; }
 
     /* Results panel */
     .results-panel {
@@ -393,14 +423,20 @@
 </header>
 
 <!-- API Key Setup -->
-<div class="setup-card">
-  <h2>🔑 API Key Setup</h2>
-  <div class="key-row">
-    <input type="password" id="apiKeyInput" placeholder="sk-ant-api03-..." autocomplete="off"/>
-    <button class="btn btn-ghost" onclick="saveKey()">Save</button>
-    <button class="btn btn-ghost" onclick="clearKey()">Clear</button>
+<div class="setup-card" id="setupCard">
+  <div id="keyExpanded">
+    <h2>🔑 API Key Setup</h2>
+    <div class="key-row">
+      <input type="password" id="apiKeyInput" placeholder="sk-ant-api03-..." autocomplete="off"/>
+      <button class="btn btn-ghost" onclick="saveKey()">Save</button>
+      <button class="btn btn-ghost" onclick="clearKey()">Clear</button>
+    </div>
+    <div class="key-status" id="keyStatus">Enter your Anthropic API key above to enable card identification</div>
   </div>
-  <div class="key-status" id="keyStatus">Enter your Anthropic API key above to enable card identification</div>
+  <div id="keyCollapsed" style="display:none" class="key-collapsed">
+    <span>🔑 API key saved ✓</span>
+    <button class="btn btn-ghost" onclick="showKeyExpanded()" style="padding:5px 12px;font-size:0.78rem">Change</button>
+  </div>
 </div>
 
 <!-- Main App -->
@@ -408,7 +444,10 @@
 
   <!-- Camera Panel -->
   <div class="panel">
-    <div class="panel-title">📷 Camera</div>
+    <div class="panel-header">
+      <div class="panel-title">📷 Camera</div>
+      <button id="identifyBtn" onclick="identifyCard()">Identify</button>
+    </div>
 
     <div class="video-wrapper">
       <div class="placeholder-icon" id="camPlaceholder">
@@ -439,8 +478,7 @@
     <button class="btn btn-ghost" style="width:100%" onclick="document.getElementById('fileInput').click()">📁 Upload Photo from File</button>
     <input type="file" id="fileInput" accept="image/*" style="display:none" onchange="handleFileUpload(event)"/>
 
-    <button class="btn btn-identify" id="identifyBtn" onclick="identifyCard()">🔍 Identify This Card</button>
-    <p class="ai-note" id="aiNote" style="display:none">Tip: Hold the card flat, face-up, with good lighting for best results</p>
+    <p class="ai-note">Tip: Hold card flat, face-up, with good lighting</p>
   </div>
 
   <!-- Results Panel -->
@@ -484,17 +522,28 @@
   function saveKey() {
     const val = document.getElementById('apiKeyInput').value.trim();
     if (!val.startsWith('sk-ant')) {
-      setKeyStatus('⚠️ That doesn\'t look like an Anthropic key (should start with sk-ant...)', false);
+      setKeyStatus('⚠️ Should start with sk-ant...', false);
       return;
     }
     localStorage.setItem('poke_anthro_key', val);
-    setKeyStatus('✓ Key saved — ready to identify cards!', true);
+    showKeyCollapsed();
   }
 
   function clearKey() {
     localStorage.removeItem('poke_anthro_key');
     document.getElementById('apiKeyInput').value = '';
     setKeyStatus('Key cleared', false);
+    showKeyExpanded();
+  }
+
+  function showKeyCollapsed() {
+    document.getElementById('keyExpanded').style.display = 'none';
+    document.getElementById('keyCollapsed').style.display = 'flex';
+  }
+
+  function showKeyExpanded() {
+    document.getElementById('keyExpanded').style.display = 'block';
+    document.getElementById('keyCollapsed').style.display = 'none';
   }
 
   function getKey() { return localStorage.getItem('poke_anthro_key') || ''; }
@@ -505,12 +554,24 @@
     el.className = 'key-status' + (ok ? ' saved' : '');
   }
 
+  function enableIdentify() {
+    const btn = document.getElementById('identifyBtn');
+    btn.classList.add('ready');
+    btn.disabled = false;
+  }
+
+  function disableIdentify() {
+    const btn = document.getElementById('identifyBtn');
+    btn.classList.remove('ready');
+    btn.disabled = true;
+  }
+
   // Load saved key on startup
   window.addEventListener('load', () => {
     const k = getKey();
     if (k) {
       document.getElementById('apiKeyInput').value = k;
-      setKeyStatus('✓ Key loaded — ready to identify cards!', true);
+      showKeyCollapsed();
     }
   });
 
@@ -540,10 +601,9 @@
       document.getElementById('captureBtn').style.display = 'inline-block';
       document.getElementById('stopBtn').style.display = 'inline-block';
       document.getElementById('flipBtn').style.display = 'inline-block';
-      document.getElementById('identifyBtn').style.display = 'none';
-      document.getElementById('aiNote').style.display = 'none';
       document.getElementById('retakeRow').style.display = 'none';
       capturedDataUrl = null;
+      disableIdentify();
     } catch (e) {
       alert('Camera access denied or unavailable: ' + e.message);
     }
@@ -562,10 +622,7 @@
     document.getElementById('captureBtn').style.display = 'none';
     document.getElementById('stopBtn').style.display = 'none';
     document.getElementById('flipBtn').style.display = 'none';
-    if (!capturedDataUrl) {
-      document.getElementById('identifyBtn').style.display = 'none';
-      document.getElementById('aiNote').style.display = 'none';
-    }
+    if (!capturedDataUrl) disableIdentify();
   }
 
   function capturePhoto() {
@@ -577,35 +634,28 @@
     ctx.drawImage(video, 0, 0);
     capturedDataUrl = canvas.toDataURL('image/jpeg', 0.92);
 
-    // Flash
     const flash = document.getElementById('flash');
     flash.style.opacity = '0.85';
     setTimeout(() => flash.style.opacity = '0', 120);
 
-    // Show preview — keep stream alive (no stopCamera), just hide video
     const img = document.getElementById('preview-img');
     img.src = capturedDataUrl;
     img.style.display = 'block';
     document.getElementById('video').style.display = 'none';
     document.getElementById('guideOverlay').style.display = 'none';
-
     document.getElementById('captureBtn').style.display = 'none';
     document.getElementById('stopBtn').style.display = 'inline-block';
     document.getElementById('retakeRow').style.display = 'flex';
-    document.getElementById('identifyBtn').style.display = 'block';
-    document.getElementById('aiNote').style.display = 'block';
+    enableIdentify();
   }
 
   function retakePhoto() {
-    // Reuse the existing stream — no permission prompt
     capturedDataUrl = null;
     document.getElementById('preview-img').style.display = 'none';
-    document.getElementById('identifyBtn').style.display = 'none';
-    document.getElementById('aiNote').style.display = 'none';
     document.getElementById('retakeRow').style.display = 'none';
+    disableIdentify();
 
     if (stream) {
-      // Stream still alive — just show video again
       document.getElementById('video').style.display = 'block';
       document.getElementById('guideOverlay').style.display = 'block';
       document.getElementById('camPlaceholder').style.display = 'none';
@@ -634,8 +684,7 @@
       document.getElementById('captureBtn').style.display = 'none';
       document.getElementById('stopBtn').style.display = 'none';
       document.getElementById('retakeRow').style.display = 'none';
-      document.getElementById('identifyBtn').style.display = 'block';
-      document.getElementById('aiNote').style.display = 'block';
+      enableIdentify();
       stopCamera();
     };
     reader.readAsDataURL(file);
@@ -672,30 +721,33 @@
 
       const prompt = `You are a Pokémon TCG expert. Look at this image carefully.
 
-If this IS a Pokémon TCG card, respond with ONLY a raw JSON object (no markdown, no code fences, no explanation) using this exact structure:
+If this IS a Pokémon TCG card, respond with ONLY a raw JSON object (no markdown, no code fences, no explanation):
 {
   "is_pokemon_card": true,
-  "pokemon_name": "base Pokémon name as printed, e.g. Charizard",
-  "card_name": "full card name including suffix like ex, V, VMAX, GX, e.g. Charizard ex",
+  "pokemon_name": "base Pokémon name, e.g. Charizard",
+  "card_name": "full name including suffix ex/V/VMAX/GX etc, e.g. Charizard ex",
   "set_name": "set name if visible, else null",
-  "card_number": "number like 4/102 if visible, else null",
-  "hp": "HP number as string, e.g. 200, or null",
-  "types": ["array of energy types, e.g. Fire, Water"],
-  "rarity": "rarity from card symbol or your knowledge, e.g. Common, Uncommon, Rare, Rare Holo, Double Rare, Ultra Rare, Special Illustration Rare, Hyper Rare",
-  "artist": "illustrator name if visible, else null",
+  "card_number": "e.g. 4/102, or null",
   "supertype": "Pokémon, Trainer, or Energy",
-  "market_price_usd": "estimated current TCGPlayer market price as a number, e.g. 4.50, or null if unknown",
-  "price_note": "brief note on price, e.g. Common card, typically $0.25-$0.50 or Rare holo, market around $5",
-  "tcgplayer_search": "https://www.tcgplayer.com/search/pokemon/product?q=CARDNAME&view=grid",
+  "evolution_stage": "Basic, Stage 1, Stage 2, VMAX, VSTAR, etc, or null",
+  "hp": "HP as string e.g. 200, or null",
+  "types": ["energy types e.g. Fire, Water"],
+  "attacks": [{"name": "attack name", "cost": "e.g. WW or FFC", "damage": "e.g. 120", "effect": "brief effect or null"}],
+  "weakness": "e.g. Fire ×2, or null",
+  "resistance": "e.g. Grass -30, or null",
+  "retreat_cost": 1,
+  "rarity": "Common, Uncommon, Rare, Rare Holo, Double Rare, Ultra Rare, Special Illustration Rare, Hyper Rare, etc",
+  "is_holo": true,
+  "regulation_mark": "letter e.g. H, or null",
+  "artist": "illustrator name if visible, else null",
+  "market_price_usd": estimated TCGPlayer market price as number or null,
+  "price_note": "e.g. Common ~$0.25 or SIR, market ~$45",
+  "tcgplayer_search": "https://www.tcgplayer.com/search/pokemon/product?q=URL_ENCODED_NAME&view=grid",
   "crop": {"x": 0.05, "y": 0.03, "w": 0.90, "h": 0.94}
 }
-
-Replace CARDNAME in tcgplayer_search with the URL-encoded card name.
-For "crop": estimate the bounding box of the card within the image as fractions of image width/height (0.0–1.0). x,y = top-left corner, w,h = width and height. If the card fills most of the frame use something like {"x":0.05,"y":0.03,"w":0.90,"h":0.94}.
-
-If this is NOT a Pokémon card, respond with ONLY: {"is_pokemon_card":false}
-
-Output raw JSON only, nothing else.`;
+For crop: estimate card bounding box as 0–1 fractions of image dimensions.
+If NOT a Pokémon card: {"is_pokemon_card":false}
+Output raw JSON only.`;
 
       let claudeRes, lastError;
       for (const model of models) {
@@ -709,7 +761,7 @@ Output raw JSON only, nothing else.`;
           },
           body: JSON.stringify({
             model,
-            max_tokens: 512,
+            max_tokens: 1024,
             messages: [{
               role: 'user',
               content: [
@@ -835,70 +887,91 @@ Output raw JSON only, nothing else.`;
     return '#888';
   }
 
+  // ── Multi-card results (ready for multiple cards later) ──
+  let cardResults = [];
+
   function showCardResult(c, thumb) {
+    cardResults = [{ c, thumb }];
+    renderResults();
+  }
+
+  function renderResults() {
     document.getElementById('loadingState').style.display = 'none';
     document.getElementById('emptyState').style.display = 'none';
     document.getElementById('errorState').style.display = 'none';
-
     const result = document.getElementById('cardResult');
+    result.innerHTML = cardResults.map(({ c, thumb }) => renderCardItem(c, thumb)).join('');
+    result.style.display = 'flex';
+  }
+
+  function renderCardItem(c, thumb) {
     const name = c.card_name || c.pokemon_name || 'Unknown';
     const types = Array.isArray(c.types) ? c.types : (c.types ? [c.types] : []);
     const rarity = c.rarity || 'Unknown';
+    const attacks = Array.isArray(c.attacks) ? c.attacks : [];
     const tcgUrl = c.tcgplayer_search ||
       `https://www.tcgplayer.com/search/pokemon/product?q=${encodeURIComponent(name)}&view=grid`;
 
-    let html = `
+    const row = (label, val) => val
+      ? `<div class="spec-row"><span class="spec-key">${label}</span><span class="spec-val">${val}</span></div>`
+      : '';
+
+    const attacksHtml = attacks.length ? `
+      <div class="spec-section-title">⚔️ Attacks</div>
+      ${attacks.map(a => `
+        <div class="attack-item">
+          <div>
+            <div class="attack-name">${a.name || '—'}</div>
+            ${a.effect ? `<div class="attack-meta">${a.effect}</div>` : ''}
+            ${a.cost ? `<div class="attack-meta">Cost: ${a.cost}</div>` : ''}
+          </div>
+          <div class="attack-damage">${a.damage || ''}</div>
+        </div>`).join('')}` : '';
+
+    return `<div class="card-result-item">
       <div class="card-header">
-        <img src="${thumb || capturedDataUrl}" class="card-thumb" alt="${name}" style="height:112px; width:auto; object-fit:contain; border-radius:6px;"/>
-        <div>
+        <img src="${thumb || capturedDataUrl}" class="card-thumb" alt="${name}"
+          style="height:110px;width:auto;object-fit:contain;border-radius:6px;flex-shrink:0"/>
+        <div style="flex:1;min-width:0">
           <div class="card-name">${name}</div>
-          ${c.set_name ? `<div class="card-set">${c.set_name}</div>` : ''}
-          ${c.card_number ? `<div class="card-number">#${c.card_number}</div>` : ''}
-          <div class="types">
+          ${c.set_name ? `<div class="card-set">${c.set_name}${c.card_number ? ' · #' + c.card_number : ''}</div>` : ''}
+          <div class="types" style="margin-top:6px">
             ${types.map(t => `<span class="type-badge type-${t}">${t}</span>`).join('')}
           </div>
-        </div>
-      </div>
-      <hr/>
-      <div class="stats-grid">
-        <div class="stat-item">
-          <div class="stat-label">HP</div>
-          <div class="stat-value">${c.hp || '—'}</div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-label">Card Type</div>
-          <div class="stat-value" style="font-size:0.9rem">${c.supertype || 'Pokémon'}</div>
-        </div>
-        <div class="stat-item" style="grid-column:1/-1">
-          <div class="stat-label">Rarity</div>
-          <div class="stat-value rarity-display">
-            <span style="color:${rarityColor(rarity)}">${rarityIcon(rarity)}</span>
-            <span style="font-size:0.95rem; color:${rarityColor(rarity)}">${rarity}</span>
-          </div>
-        </div>
-        ${c.artist ? `
-        <div class="stat-item" style="grid-column:1/-1">
-          <div class="stat-label">Illustrator</div>
-          <div class="stat-value" style="font-size:0.88rem; font-weight:500">${c.artist}</div>
-        </div>` : ''}
-      </div>
-      <hr/>
-      <div class="prices-section">
-        <div class="prices-title">💰 Estimated Market Price (USD)</div>
-        <div class="price-grid">
-          <div class="price-item" style="grid-column:1/-1">
-            <div class="price-condition">Market Estimate</div>
-            <div class="price-value">${c.market_price_usd ? '$' + Number(c.market_price_usd).toFixed(2) : '<span class="no-price">Unknown</span>'}</div>
-            ${c.price_note ? `<div style="font-size:0.75rem; color:#666; margin-top:4px">${c.price_note}</div>` : ''}
+          <div style="margin-top:8px">
+            <span style="color:${rarityColor(rarity)};font-size:0.9rem">${rarityIcon(rarity)} </span>
+            <span style="font-size:0.78rem;color:${rarityColor(rarity)}">${rarity}</span>
+            ${c.is_holo ? '<span style="font-size:0.72rem;color:#aaa;margin-left:6px">✨ Holo</span>' : ''}
           </div>
         </div>
       </div>
-      <a href="${tcgUrl}" target="_blank" class="tcg-link">🔗 Search on TCGPlayer ↗</a>
-      <p style="font-size:0.72rem; color:#444; margin-top:-4px">Price is Claude's estimate — check TCGPlayer for live pricing</p>
-    `;
 
-    result.innerHTML = html;
-    result.style.display = 'flex';
+      <div class="spec-section">
+        <div class="spec-section-title">📋 Identity</div>
+        ${row('Type', c.supertype)}
+        ${row('Stage', c.evolution_stage)}
+        ${row('HP', c.hp ? c.hp + ' HP' : null)}
+        ${row('Regulation', c.regulation_mark)}
+        ${row('Artist', c.artist)}
+      </div>
+
+      <div class="spec-section">
+        <div class="spec-section-title">⚔️ Battle</div>
+        ${attacksHtml ? attacksHtml : row('Attacks', '—')}
+        ${row('Weakness', c.weakness)}
+        ${row('Resistance', c.resistance)}
+        ${row('Retreat', c.retreat_cost != null ? '●'.repeat(Math.min(c.retreat_cost, 5)) || 'Free' : null)}
+      </div>
+
+      <div class="spec-section">
+        <div class="spec-section-title">💰 Price</div>
+        ${row('Market Est.', c.market_price_usd ? '$' + Number(c.market_price_usd).toFixed(2) : null)}
+        ${c.price_note ? `<div style="font-size:0.72rem;color:#555;padding:4px 0">${c.price_note}</div>` : ''}
+      </div>
+
+      <a href="${tcgUrl}" target="_blank" class="tcg-link">🔗 Search on TCGPlayer ↗</a>
+      <p style="font-size:0.7rem;color:#444;margin-top:-6px">Price is Claude's estimate</p>
+    </div>`;
   }
 </script>
 </body>
