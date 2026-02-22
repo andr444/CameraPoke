@@ -3,13 +3,7 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>CameraPoke</title>
-  <link rel="manifest" href="manifest.json"/>
-  <meta name="theme-color" content="#ffcb05"/>
-  <meta name="apple-mobile-web-app-capable" content="yes"/>
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
-  <meta name="apple-mobile-web-app-title" content="CameraPoke"/>
-  <link rel="apple-touch-icon" href="icons/icon-192.png"/>
+  <title>Pokémon Card Identifier</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -432,6 +426,7 @@
     <div class="controls" id="camControls">
       <button class="btn btn-primary" id="startBtn" onclick="startCamera()">Start Camera</button>
       <button class="btn btn-secondary" id="captureBtn" onclick="capturePhoto()" style="display:none">📸 Capture</button>
+      <button class="btn btn-ghost" id="flipBtn" onclick="flipCamera()" style="display:none" title="Flip camera">🔄</button>
       <button class="btn btn-ghost" id="stopBtn" onclick="stopCamera()" style="display:none">Stop</button>
     </div>
 
@@ -520,9 +515,21 @@
   });
 
   // ── Camera ─────────────────────────────────────────────
-  async function startCamera() {
+  let facingMode = 'environment'; // start with rear camera
+
+  async function startCamera(facing) {
+    if (facing) facingMode = facing;
+    if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 960 } }, audio: false });
+      // Try with preferred facing mode first, fall back to any camera
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: facingMode }, width: { ideal: 1280 }, height: { ideal: 960 } },
+          audio: false
+        });
+      } catch {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      }
       const video = document.getElementById('video');
       video.srcObject = stream;
       video.style.display = 'block';
@@ -532,6 +539,7 @@
       document.getElementById('startBtn').style.display = 'none';
       document.getElementById('captureBtn').style.display = 'inline-block';
       document.getElementById('stopBtn').style.display = 'inline-block';
+      document.getElementById('flipBtn').style.display = 'inline-block';
       document.getElementById('identifyBtn').style.display = 'none';
       document.getElementById('aiNote').style.display = 'none';
       document.getElementById('retakeRow').style.display = 'none';
@@ -539,6 +547,10 @@
     } catch (e) {
       alert('Camera access denied or unavailable: ' + e.message);
     }
+  }
+
+  function flipCamera() {
+    startCamera(facingMode === 'environment' ? 'user' : 'environment');
   }
 
   function stopCamera() {
@@ -549,6 +561,7 @@
     document.getElementById('startBtn').style.display = 'inline-block';
     document.getElementById('captureBtn').style.display = 'none';
     document.getElementById('stopBtn').style.display = 'none';
+    document.getElementById('flipBtn').style.display = 'none';
     if (!capturedDataUrl) {
       document.getElementById('identifyBtn').style.display = 'none';
       document.getElementById('aiNote').style.display = 'none';
@@ -598,6 +611,7 @@
       document.getElementById('camPlaceholder').style.display = 'none';
       document.getElementById('captureBtn').style.display = 'inline-block';
       document.getElementById('stopBtn').style.display = 'inline-block';
+      document.getElementById('flipBtn').style.display = 'inline-block';
       document.getElementById('startBtn').style.display = 'none';
     } else {
       startCamera();
@@ -870,12 +884,6 @@ Output raw JSON only, nothing else.`;
 
     result.innerHTML = html;
     result.style.display = 'flex';
-  }
-  // Register service worker for PWA / offline support
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js').catch(() => {});
-    });
   }
 </script>
 </body>
