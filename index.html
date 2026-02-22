@@ -413,6 +413,38 @@
       text-align: center;
       padding: 0 8px;
     }
+
+    /* Emphasized price box */
+    .price-box {
+      background: linear-gradient(135deg, rgba(255,203,5,0.12), rgba(255,140,0,0.08));
+      border: 1.5px solid rgba(255,203,5,0.4);
+      border-radius: 12px;
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .price-box-label {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #888;
+    }
+    .price-box-amount {
+      font-size: 1.8rem;
+      font-weight: 800;
+      color: var(--accent);
+      line-height: 1;
+    }
+    .price-box-note {
+      font-size: 0.72rem;
+      color: #666;
+      margin-top: 3px;
+    }
+    .price-box-right {
+      text-align: right;
+    }
   </style>
 </head>
 <body>
@@ -928,6 +960,25 @@ Output raw JSON only.`;
           <div class="attack-damage">${a.damage || ''}</div>
         </div>`).join('')}` : '';
 
+    const priceHtml = c.market_price_usd
+      ? `<div class="price-box">
+          <div>
+            <div class="price-box-label">💰 Market Price Est.</div>
+            ${c.price_note ? `<div class="price-box-note">${c.price_note}</div>` : ''}
+          </div>
+          <div class="price-box-right">
+            <div class="price-box-amount">$${Number(c.market_price_usd).toFixed(2)}</div>
+            <div class="price-box-note" style="margin-top:4px">Claude's estimate</div>
+          </div>
+        </div>`
+      : `<div class="price-box">
+          <div class="price-box-label">💰 Market Price Est.</div>
+          <div class="price-box-right">
+            <div class="price-box-amount" style="font-size:1.1rem;color:#555">—</div>
+            ${c.price_note ? `<div class="price-box-note">${c.price_note}</div>` : ''}
+          </div>
+        </div>`;
+
     return `<div class="card-result-item">
       <div class="card-header">
         <img src="${thumb || capturedDataUrl}" class="card-thumb" alt="${name}"
@@ -946,6 +997,8 @@ Output raw JSON only.`;
         </div>
       </div>
 
+      ${priceHtml}
+
       <div class="spec-section">
         <div class="spec-section-title">📋 Identity</div>
         ${row('Type', c.supertype)}
@@ -963,14 +1016,7 @@ Output raw JSON only.`;
         ${row('Retreat', c.retreat_cost != null ? '●'.repeat(Math.min(c.retreat_cost, 5)) || 'Free' : null)}
       </div>
 
-      <div class="spec-section">
-        <div class="spec-section-title">💰 Price</div>
-        ${row('Market Est.', c.market_price_usd ? '$' + Number(c.market_price_usd).toFixed(2) : null)}
-        ${c.price_note ? `<div style="font-size:0.72rem;color:#555;padding:4px 0">${c.price_note}</div>` : ''}
-      </div>
-
       <a href="${tcgUrl}" target="_blank" class="tcg-link">🔗 Search on TCGPlayer ↗</a>
-      <p style="font-size:0.7rem;color:#444;margin-top:-6px">Price is Claude's estimate</p>
     </div>`;
   }
 </script>
