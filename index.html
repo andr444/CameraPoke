@@ -687,11 +687,11 @@ If this IS a Pokémon TCG card, respond with ONLY a raw JSON object (no markdown
   "market_price_usd": "estimated current TCGPlayer market price as a number, e.g. 4.50, or null if unknown",
   "price_note": "brief note on price, e.g. Common card, typically $0.25-$0.50 or Rare holo, market around $5",
   "tcgplayer_search": "https://www.tcgplayer.com/search/pokemon/product?q=CARDNAME&view=grid",
-  "card_image_url": "URL to the card image on images.pokemontcg.io, e.g. https://images.pokemontcg.io/base1/4_hires.png — use the correct set ID and card number, or null if unsure"
+  "crop": {"x": 0.05, "y": 0.03, "w": 0.90, "h": 0.94}
 }
 
 Replace CARDNAME in tcgplayer_search with the URL-encoded card name.
-For card_image_url, the pokemontcg.io set IDs follow patterns like: base1, base2, gym1, gym2, neo1-neo4, ecard1-3, ex1-ex16, dp1-dp7, pl1-pl4, hgss1-hgss4, bw1-bw11, xy1-xy12, sm1-sm12, swsh1-swsh12, sv1-sv9. Card number matches the printed number.
+For "crop": estimate the bounding box of the card within the image as fractions of image width/height (0.0–1.0). x,y = top-left corner, w,h = width and height. If the card fills most of the frame use something like {"x":0.05,"y":0.03,"w":0.90,"h":0.94}.
 
 If this is NOT a Pokémon card, respond with ONLY: {"is_pokemon_card":false}
 
@@ -749,11 +749,31 @@ Output raw JSON only, nothing else.`;
         return;
       }
 
-      showCardResult(cardInfo);
+      const thumb = await cropImage(capturedDataUrl, cardInfo.crop);
+      showCardResult(cardInfo, thumb);
 
     } catch (e) {
       showError('Identification Failed', e.message);
     }
+  }
+
+  // Crop image using normalised bbox {x,y,w,h} (0–1 fractions)
+  function cropImage(dataUrl, bbox) {
+    return new Promise((resolve) => {
+      if (!bbox) { resolve(dataUrl); return; }
+      const img = new Image();
+      img.onload = () => {
+        const sx = Math.round(bbox.x * img.width);
+        const sy = Math.round(bbox.y * img.height);
+        const sw = Math.round(bbox.w * img.width);
+        const sh = Math.round(bbox.h * img.height);
+        const c = document.createElement('canvas');
+        c.width = sw; c.height = sh;
+        c.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+        resolve(c.toDataURL('image/jpeg', 0.92));
+      };
+      img.src = dataUrl;
+    });
   }
 
   // Resize image to maxPx on longest side and convert to JPEG
@@ -815,7 +835,7 @@ Output raw JSON only, nothing else.`;
     return '#888';
   }
 
-  function showCardResult(c) {
+  function showCardResult(c, thumb) {
     document.getElementById('loadingState').style.display = 'none';
     document.getElementById('emptyState').style.display = 'none';
     document.getElementById('errorState').style.display = 'none';
@@ -827,14 +847,9 @@ Output raw JSON only, nothing else.`;
     const tcgUrl = c.tcgplayer_search ||
       `https://www.tcgplayer.com/search/pokemon/product?q=${encodeURIComponent(name)}&view=grid`;
 
-    const thumbSrc = c.card_image_url || capturedDataUrl;
-    const thumbFallback = c.card_image_url
-      ? `onerror="this.src='${capturedDataUrl}'"`
-      : '';
-
     let html = `
       <div class="card-header">
-        <img src="${thumbSrc}" ${thumbFallback} class="card-thumb" alt="${name}" style="height:112px; width:auto; object-fit:contain;"/>
+        <img src="${thumb || capturedDataUrl}" class="card-thumb" alt="${name}" style="height:112px; width:auto; object-fit:contain; border-radius:6px;"/>
         <div>
           <div class="card-name">${name}</div>
           ${c.set_name ? `<div class="card-set">${c.set_name}</div>` : ''}
