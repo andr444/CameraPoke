@@ -1,0 +1,882 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>CameraPoke</title>
+  <link rel="manifest" href="manifest.json"/>
+  <meta name="theme-color" content="#ffcb05"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="CameraPoke"/>
+  <link rel="apple-touch-icon" href="icons/icon-192.png"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0d0d14;
+      --surface: #16161f;
+      --surface2: #1e1e2a;
+      --border: #2a2a3a;
+      --accent: #ffcb05;
+      --accent2: #3b5ea6;
+      --text: #f0f0f0;
+      --muted: #888;
+      --success: #4caf7d;
+      --error: #f55;
+      --radius: 14px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 28px 16px 60px;
+      gap: 24px;
+    }
+
+    /* Header */
+    header {
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+    header h1 {
+      font-size: 1.9rem;
+      font-weight: 800;
+      background: linear-gradient(135deg, var(--accent), #ff8c00);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      letter-spacing: -0.5px;
+    }
+    header p { color: var(--muted); font-size: 0.9rem; }
+
+    /* API Key Setup */
+    .setup-card {
+      width: 100%;
+      max-width: 620px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .setup-card h2 {
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--muted);
+    }
+    .key-row {
+      display: flex;
+      gap: 8px;
+    }
+    .key-row input {
+      flex: 1;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      color: var(--text);
+      font-size: 0.9rem;
+      font-family: monospace;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .key-row input:focus { border-color: var(--accent); }
+    .key-row input::placeholder { color: #444; }
+    .key-status {
+      font-size: 0.8rem;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .key-status.saved { color: var(--success); }
+
+    /* Main layout */
+    .main {
+      width: 100%;
+      max-width: 1000px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    @media (max-width: 700px) {
+      .main { grid-template-columns: 1fr; }
+    }
+
+    /* Camera panel */
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .panel-title {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--muted);
+    }
+
+    .video-wrapper {
+      position: relative;
+      width: 100%;
+      max-height: 220px;
+      aspect-ratio: 4/3;
+      background: var(--surface2);
+      border-radius: 10px;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--border);
+    }
+    #video {
+      width: 100%; height: 100%;
+      object-fit: cover;
+      display: none;
+      transform: scaleX(-1);
+    }
+    #preview-img {
+      width: 100%; height: 100%;
+      object-fit: contain;
+      display: none;
+    }
+    .placeholder-icon {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      color: #333;
+    }
+    .placeholder-icon svg { width: 48px; height: 48px; }
+    .placeholder-icon p { font-size: 0.85rem; color: #444; }
+    .flash { position: absolute; inset: 0; background: white; opacity: 0; pointer-events: none; border-radius: 10px; transition: opacity 0.06s; }
+
+    /* Guide overlay */
+    .guide-overlay {
+      position: absolute;
+      inset: 12px;
+      border: 2px dashed rgba(255, 203, 5, 0.35);
+      border-radius: 8px;
+      pointer-events: none;
+      display: none;
+    }
+
+    .controls { display: flex; gap: 8px; flex-wrap: wrap; }
+
+    /* Buttons */
+    .btn {
+      padding: 10px 22px;
+      border-radius: 50px;
+      border: none;
+      font-size: 0.88rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !important; }
+    .btn-primary { background: var(--accent); color: #111; }
+    .btn-primary:not(:disabled):hover { background: #e6b800; transform: translateY(-1px); }
+    .btn-secondary { background: var(--accent2); color: white; }
+    .btn-secondary:not(:disabled):hover { background: #2e4d8a; transform: translateY(-1px); }
+    .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+    .btn-ghost:not(:disabled):hover { background: var(--surface2); color: var(--text); }
+    .btn-identify { background: linear-gradient(135deg, #ff6b35, #ff3d00); color: white; width: 100%; padding: 13px; font-size: 0.95rem; border-radius: 10px; display: none; }
+    .btn-identify:not(:disabled):hover { opacity: 0.9; transform: translateY(-1px); }
+
+    /* Results panel */
+    .results-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      min-height: 300px;
+    }
+
+    .empty-state {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      color: #333;
+      text-align: center;
+    }
+    .empty-state svg { width: 40px; height: 40px; }
+    .empty-state p { font-size: 0.85rem; color: #444; }
+
+    .loading-state {
+      flex: 1;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+    }
+    .spinner {
+      width: 40px; height: 40px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-msg { color: var(--muted); font-size: 0.9rem; }
+
+    /* Card result */
+    .card-result { display: none; flex-direction: column; gap: 16px; }
+
+    .card-header {
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+    }
+    .card-thumb {
+      width: 80px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      flex-shrink: 0;
+      background: var(--surface2);
+    }
+    .card-thumb-placeholder {
+      width: 80px;
+      height: 112px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      flex-shrink: 0;
+      background: var(--surface2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #333;
+      font-size: 1.6rem;
+    }
+    .card-name { font-size: 1.3rem; font-weight: 700; }
+    .card-set { font-size: 0.85rem; color: var(--muted); margin-top: 3px; }
+    .card-number { font-size: 0.8rem; color: #555; margin-top: 2px; font-family: monospace; }
+
+    /* Type badges */
+    .types { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+    .type-badge {
+      padding: 3px 10px;
+      border-radius: 50px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .type-Fire { background: #ff6b35; color: white; }
+    .type-Water { background: #3b9ee8; color: white; }
+    .type-Grass { background: #4caf7d; color: white; }
+    .type-Psychic { background: #c45ab3; color: white; }
+    .type-Lightning { background: #ffcb05; color: #111; }
+    .type-Fighting { background: #c0392b; color: white; }
+    .type-Darkness { background: #2c3e50; color: white; }
+    .type-Metal { background: #95a5a6; color: #111; }
+    .type-Dragon { background: #7d3c98; color: white; }
+    .type-Colorless { background: #bdc3c7; color: #111; }
+    .type-Fairy { background: #f48fb1; color: #111; }
+    .type-default { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+
+    /* Stats grid */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .stat-item {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+    }
+    .stat-label { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+    .stat-value { font-size: 1.05rem; font-weight: 700; margin-top: 3px; }
+
+    /* Rarity stars */
+    .rarity-display { display: flex; align-items: center; gap: 6px; }
+    .rarity-icon { font-size: 1rem; }
+
+    /* Prices */
+    .prices-section { display: flex; flex-direction: column; gap: 8px; }
+    .prices-title { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+    .price-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
+    .price-item {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+    }
+    .price-condition { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; }
+    .price-value { font-size: 1.1rem; font-weight: 700; color: var(--accent); margin-top: 2px; }
+    .no-price { color: #555; font-size: 0.85rem; }
+
+    /* Error */
+    .error-state {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      color: var(--error);
+      text-align: center;
+      flex: 1;
+    }
+    .error-state p { font-size: 0.85rem; color: var(--muted); max-width: 280px; }
+
+    /* Divider */
+    hr { border: none; border-top: 1px solid var(--border); }
+
+    /* TCGPlayer link */
+    .tcg-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--accent);
+      font-size: 0.85rem;
+      text-decoration: none;
+      font-weight: 600;
+      padding: 8px 14px;
+      border: 1px solid rgba(255,203,5,0.3);
+      border-radius: 8px;
+      transition: all 0.15s;
+    }
+    .tcg-link:hover { background: rgba(255,203,5,0.08); }
+
+    canvas { display: none; }
+
+    /* Retake area */
+    .retake-row { display: flex; gap: 8px; }
+
+    /* Upload button */
+    .upload-divider {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #444;
+      font-size: 0.8rem;
+    }
+    .upload-divider::before, .upload-divider::after {
+      content: '';
+      flex: 1;
+      border-top: 1px solid var(--border);
+    }
+
+    /* AI note */
+    .ai-note {
+      font-size: 0.75rem;
+      color: #555;
+      text-align: center;
+      padding: 0 8px;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>⚡ Pokémon Card Identifier</h1>
+  <p>Capture any card and instantly get its details &amp; price</p>
+</header>
+
+<!-- API Key Setup -->
+<div class="setup-card">
+  <h2>🔑 API Key Setup</h2>
+  <div class="key-row">
+    <input type="password" id="apiKeyInput" placeholder="sk-ant-api03-..." autocomplete="off"/>
+    <button class="btn btn-ghost" onclick="saveKey()">Save</button>
+    <button class="btn btn-ghost" onclick="clearKey()">Clear</button>
+  </div>
+  <div class="key-status" id="keyStatus">Enter your Anthropic API key above to enable card identification</div>
+</div>
+
+<!-- Main App -->
+<div class="main">
+
+  <!-- Camera Panel -->
+  <div class="panel">
+    <div class="panel-title">📷 Camera</div>
+
+    <div class="video-wrapper">
+      <div class="placeholder-icon" id="camPlaceholder">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M15 10l4.553-2.069A1 1 0 0121 8.871v6.258a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/>
+        </svg>
+        <p>Camera off</p>
+      </div>
+      <video id="video" autoplay playsinline></video>
+      <img id="preview-img" alt="Captured card"/>
+      <div class="flash" id="flash"></div>
+      <div class="guide-overlay" id="guideOverlay"></div>
+    </div>
+
+    <div class="controls" id="camControls">
+      <button class="btn btn-primary" id="startBtn" onclick="startCamera()">Start Camera</button>
+      <button class="btn btn-secondary" id="captureBtn" onclick="capturePhoto()" style="display:none">📸 Capture</button>
+      <button class="btn btn-ghost" id="stopBtn" onclick="stopCamera()" style="display:none">Stop</button>
+    </div>
+
+    <div class="retake-row" id="retakeRow" style="display:none">
+      <button class="btn btn-ghost" style="flex:1" onclick="retakePhoto()">↩ Retake</button>
+    </div>
+
+    <div class="upload-divider">or</div>
+
+    <button class="btn btn-ghost" style="width:100%" onclick="document.getElementById('fileInput').click()">📁 Upload Photo from File</button>
+    <input type="file" id="fileInput" accept="image/*" style="display:none" onchange="handleFileUpload(event)"/>
+
+    <button class="btn btn-identify" id="identifyBtn" onclick="identifyCard()">🔍 Identify This Card</button>
+    <p class="ai-note" id="aiNote" style="display:none">Tip: Hold the card flat, face-up, with good lighting for best results</p>
+  </div>
+
+  <!-- Results Panel -->
+  <div class="results-panel" id="resultsPanel">
+    <div class="panel-title">📋 Card Details</div>
+
+    <div class="empty-state" id="emptyState">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="3" y="3" width="18" height="18" rx="3"/>
+        <path d="M9 9h6M9 12h6M9 15h4"/>
+      </svg>
+      <p>Capture a card and tap "Identify" to see its name, rarity, and prices</p>
+    </div>
+
+    <div class="loading-state" id="loadingState">
+      <div class="spinner"></div>
+      <div class="loading-msg" id="loadingMsg">Analyzing card...</div>
+    </div>
+
+    <div class="error-state" id="errorState">
+      <span style="font-size:2rem">⚠️</span>
+      <strong id="errorTitle">Something went wrong</strong>
+      <p id="errorMsg"></p>
+    </div>
+
+    <div class="card-result" id="cardResult">
+      <!-- Populated by JS -->
+    </div>
+  </div>
+
+</div>
+
+<canvas id="canvas"></canvas>
+
+<script>
+  // ── State ──────────────────────────────────────────────
+  let stream = null;
+  let capturedDataUrl = null;
+
+  // ── API Key ────────────────────────────────────────────
+  function saveKey() {
+    const val = document.getElementById('apiKeyInput').value.trim();
+    if (!val.startsWith('sk-ant')) {
+      setKeyStatus('⚠️ That doesn\'t look like an Anthropic key (should start with sk-ant...)', false);
+      return;
+    }
+    localStorage.setItem('poke_anthro_key', val);
+    setKeyStatus('✓ Key saved — ready to identify cards!', true);
+  }
+
+  function clearKey() {
+    localStorage.removeItem('poke_anthro_key');
+    document.getElementById('apiKeyInput').value = '';
+    setKeyStatus('Key cleared', false);
+  }
+
+  function getKey() { return localStorage.getItem('poke_anthro_key') || ''; }
+
+  function setKeyStatus(msg, ok) {
+    const el = document.getElementById('keyStatus');
+    el.textContent = msg;
+    el.className = 'key-status' + (ok ? ' saved' : '');
+  }
+
+  // Load saved key on startup
+  window.addEventListener('load', () => {
+    const k = getKey();
+    if (k) {
+      document.getElementById('apiKeyInput').value = k;
+      setKeyStatus('✓ Key loaded — ready to identify cards!', true);
+    }
+  });
+
+  // ── Camera ─────────────────────────────────────────────
+  async function startCamera() {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 960 } }, audio: false });
+      const video = document.getElementById('video');
+      video.srcObject = stream;
+      video.style.display = 'block';
+      document.getElementById('camPlaceholder').style.display = 'none';
+      document.getElementById('preview-img').style.display = 'none';
+      document.getElementById('guideOverlay').style.display = 'block';
+      document.getElementById('startBtn').style.display = 'none';
+      document.getElementById('captureBtn').style.display = 'inline-block';
+      document.getElementById('stopBtn').style.display = 'inline-block';
+      document.getElementById('identifyBtn').style.display = 'none';
+      document.getElementById('aiNote').style.display = 'none';
+      document.getElementById('retakeRow').style.display = 'none';
+      capturedDataUrl = null;
+    } catch (e) {
+      alert('Camera access denied or unavailable: ' + e.message);
+    }
+  }
+
+  function stopCamera() {
+    if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+    document.getElementById('video').style.display = 'none';
+    document.getElementById('guideOverlay').style.display = 'none';
+    document.getElementById('camPlaceholder').style.display = 'flex';
+    document.getElementById('startBtn').style.display = 'inline-block';
+    document.getElementById('captureBtn').style.display = 'none';
+    document.getElementById('stopBtn').style.display = 'none';
+    if (!capturedDataUrl) {
+      document.getElementById('identifyBtn').style.display = 'none';
+      document.getElementById('aiNote').style.display = 'none';
+    }
+  }
+
+  function capturePhoto() {
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0);
+    capturedDataUrl = canvas.toDataURL('image/jpeg', 0.92);
+
+    // Flash
+    const flash = document.getElementById('flash');
+    flash.style.opacity = '0.85';
+    setTimeout(() => flash.style.opacity = '0', 120);
+
+    // Show preview — keep stream alive (no stopCamera), just hide video
+    const img = document.getElementById('preview-img');
+    img.src = capturedDataUrl;
+    img.style.display = 'block';
+    document.getElementById('video').style.display = 'none';
+    document.getElementById('guideOverlay').style.display = 'none';
+
+    document.getElementById('captureBtn').style.display = 'none';
+    document.getElementById('stopBtn').style.display = 'inline-block';
+    document.getElementById('retakeRow').style.display = 'flex';
+    document.getElementById('identifyBtn').style.display = 'block';
+    document.getElementById('aiNote').style.display = 'block';
+  }
+
+  function retakePhoto() {
+    // Reuse the existing stream — no permission prompt
+    capturedDataUrl = null;
+    document.getElementById('preview-img').style.display = 'none';
+    document.getElementById('identifyBtn').style.display = 'none';
+    document.getElementById('aiNote').style.display = 'none';
+    document.getElementById('retakeRow').style.display = 'none';
+
+    if (stream) {
+      // Stream still alive — just show video again
+      document.getElementById('video').style.display = 'block';
+      document.getElementById('guideOverlay').style.display = 'block';
+      document.getElementById('camPlaceholder').style.display = 'none';
+      document.getElementById('captureBtn').style.display = 'inline-block';
+      document.getElementById('stopBtn').style.display = 'inline-block';
+      document.getElementById('startBtn').style.display = 'none';
+    } else {
+      startCamera();
+    }
+  }
+
+  function handleFileUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      capturedDataUrl = e.target.result;
+      const img = document.getElementById('preview-img');
+      img.src = capturedDataUrl;
+      img.style.display = 'block';
+      document.getElementById('camPlaceholder').style.display = 'none';
+      document.getElementById('video').style.display = 'none';
+      document.getElementById('guideOverlay').style.display = 'none';
+      document.getElementById('startBtn').style.display = 'inline-block';
+      document.getElementById('captureBtn').style.display = 'none';
+      document.getElementById('stopBtn').style.display = 'none';
+      document.getElementById('retakeRow').style.display = 'none';
+      document.getElementById('identifyBtn').style.display = 'block';
+      document.getElementById('aiNote').style.display = 'block';
+      stopCamera();
+    };
+    reader.readAsDataURL(file);
+    // Reset input so same file can be re-selected
+    event.target.value = '';
+  }
+
+  // ── Identify ───────────────────────────────────────────
+  async function identifyCard() {
+    const apiKey = getKey();
+    if (!apiKey) {
+      alert('Please enter and save your Anthropic API key first.');
+      return;
+    }
+    if (!capturedDataUrl) {
+      alert('Please capture a photo first.');
+      return;
+    }
+
+    showLoading('🔍 Asking Claude to identify the card...');
+
+    try {
+      // Step 1: Resize image to max 1024px and convert to JPEG for API efficiency
+      const resizedDataUrl = await resizeImage(capturedDataUrl, 1024);
+      const base64 = resizedDataUrl.split(',')[1];
+      const mediaType = 'image/jpeg';
+
+      // Try models in order of preference until one works
+      const models = [
+        'claude-sonnet-4-5-20250929',
+        'claude-3-5-sonnet-20241022',
+        'claude-3-haiku-20240307'
+      ];
+
+      const prompt = `You are a Pokémon TCG expert. Look at this image carefully.
+
+If this IS a Pokémon TCG card, respond with ONLY a raw JSON object (no markdown, no code fences, no explanation) using this exact structure:
+{
+  "is_pokemon_card": true,
+  "pokemon_name": "base Pokémon name as printed, e.g. Charizard",
+  "card_name": "full card name including suffix like ex, V, VMAX, GX, e.g. Charizard ex",
+  "set_name": "set name if visible, else null",
+  "card_number": "number like 4/102 if visible, else null",
+  "hp": "HP number as string, e.g. 200, or null",
+  "types": ["array of energy types, e.g. Fire, Water"],
+  "rarity": "rarity from card symbol or your knowledge, e.g. Common, Uncommon, Rare, Rare Holo, Double Rare, Ultra Rare, Special Illustration Rare, Hyper Rare",
+  "artist": "illustrator name if visible, else null",
+  "supertype": "Pokémon, Trainer, or Energy",
+  "market_price_usd": "estimated current TCGPlayer market price as a number, e.g. 4.50, or null if unknown",
+  "price_note": "brief note on price, e.g. Common card, typically $0.25-$0.50 or Rare holo, market around $5",
+  "tcgplayer_search": "https://www.tcgplayer.com/search/pokemon/product?q=CARDNAME&view=grid",
+  "card_image_url": "URL to the card image on images.pokemontcg.io, e.g. https://images.pokemontcg.io/base1/4_hires.png — use the correct set ID and card number, or null if unsure"
+}
+
+Replace CARDNAME in tcgplayer_search with the URL-encoded card name.
+For card_image_url, the pokemontcg.io set IDs follow patterns like: base1, base2, gym1, gym2, neo1-neo4, ecard1-3, ex1-ex16, dp1-dp7, pl1-pl4, hgss1-hgss4, bw1-bw11, xy1-xy12, sm1-sm12, swsh1-swsh12, sv1-sv9. Card number matches the printed number.
+
+If this is NOT a Pokémon card, respond with ONLY: {"is_pokemon_card":false}
+
+Output raw JSON only, nothing else.`;
+
+      let claudeRes, lastError;
+      for (const model of models) {
+        claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+            'content-type': 'application/json',
+            'anthropic-dangerous-direct-browser-access': 'true'
+          },
+          body: JSON.stringify({
+            model,
+            max_tokens: 512,
+            messages: [{
+              role: 'user',
+              content: [
+                { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
+                { type: 'text', text: prompt }
+              ]
+            }]
+          })
+        });
+        if (claudeRes.ok) break;
+        const errBody = await claudeRes.json().catch(() => ({}));
+        lastError = errBody.error?.message || `API error ${claudeRes.status}`;
+        console.warn(`Model ${model} failed:`, lastError);
+        if (claudeRes.status === 401) throw new Error('Invalid API key. Please check your Anthropic API key and save it again.');
+        if (claudeRes.status === 429) throw new Error('Rate limit reached. Wait a moment and try again.');
+      }
+
+      if (!claudeRes.ok) {
+        throw new Error(lastError || 'All models unavailable. Check your API key has sufficient credits.');
+      }
+
+      const claudeData = await claudeRes.json();
+      const rawText = (claudeData.content?.[0]?.text || '').trim();
+
+      let cardInfo;
+      try {
+        // Strip markdown code fences if model added them anyway
+        const cleaned = rawText.replace(/^```[a-z]*\n?/i, '').replace(/```$/,'').trim();
+        const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+        cardInfo = JSON.parse(jsonMatch ? jsonMatch[0] : cleaned);
+      } catch {
+        throw new Error(`Could not parse Claude's response. Got: "${rawText.slice(0, 120)}"`);
+      }
+
+      if (!cardInfo.is_pokemon_card) {
+        showError('Not a Pokémon Card', 'Claude couldn\'t find a Pokémon card in this image. Make sure the card name is clearly visible and try again with better lighting.');
+        return;
+      }
+
+      showCardResult(cardInfo);
+
+    } catch (e) {
+      showError('Identification Failed', e.message);
+    }
+  }
+
+  // Resize image to maxPx on longest side and convert to JPEG
+  function resizeImage(dataUrl, maxPx) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        let w = img.width, h = img.height;
+        if (w > maxPx || h > maxPx) {
+          if (w > h) { h = Math.round(h * maxPx / w); w = maxPx; }
+          else { w = Math.round(w * maxPx / h); h = maxPx; }
+        }
+        const c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        c.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(c.toDataURL('image/jpeg', 0.9));
+      };
+      img.src = dataUrl;
+    });
+  }
+
+  // ── UI Helpers ─────────────────────────────────────────
+  function showLoading(msg) {
+    document.getElementById('emptyState').style.display = 'none';
+    document.getElementById('cardResult').style.display = 'none';
+    document.getElementById('errorState').style.display = 'none';
+    document.getElementById('loadingMsg').textContent = msg;
+    document.getElementById('loadingState').style.display = 'flex';
+  }
+
+  function showError(title, msg) {
+    document.getElementById('loadingState').style.display = 'none';
+    document.getElementById('cardResult').style.display = 'none';
+    document.getElementById('emptyState').style.display = 'none';
+    document.getElementById('errorTitle').textContent = title;
+    document.getElementById('errorMsg').textContent = msg;
+    document.getElementById('errorState').style.display = 'flex';
+  }
+
+  function rarityIcon(rarity) {
+    if (!rarity) return '';
+    const r = rarity.toLowerCase();
+    if (r.includes('secret') || r.includes('hyper')) return '✦✦✦✦';
+    if (r.includes('ultra') || r.includes('rainbow')) return '✦✦✦';
+    if (r.includes('rare holo')) return '✦✦';
+    if (r.includes('rare')) return '✦';
+    if (r.includes('uncommon')) return '◆◆';
+    if (r.includes('common')) return '◆';
+    return '◈';
+  }
+
+  function rarityColor(rarity) {
+    if (!rarity) return '#888';
+    const r = rarity.toLowerCase();
+    if (r.includes('secret') || r.includes('hyper') || r.includes('rainbow')) return '#ff6bff';
+    if (r.includes('ultra')) return '#ff8c00';
+    if (r.includes('rare holo') || r.includes('rare')) return '#ffcb05';
+    if (r.includes('uncommon')) return '#4caf7d';
+    return '#888';
+  }
+
+  function showCardResult(c) {
+    document.getElementById('loadingState').style.display = 'none';
+    document.getElementById('emptyState').style.display = 'none';
+    document.getElementById('errorState').style.display = 'none';
+
+    const result = document.getElementById('cardResult');
+    const name = c.card_name || c.pokemon_name || 'Unknown';
+    const types = Array.isArray(c.types) ? c.types : (c.types ? [c.types] : []);
+    const rarity = c.rarity || 'Unknown';
+    const tcgUrl = c.tcgplayer_search ||
+      `https://www.tcgplayer.com/search/pokemon/product?q=${encodeURIComponent(name)}&view=grid`;
+
+    const thumbSrc = c.card_image_url || capturedDataUrl;
+    const thumbFallback = c.card_image_url
+      ? `onerror="this.src='${capturedDataUrl}'"`
+      : '';
+
+    let html = `
+      <div class="card-header">
+        <img src="${thumbSrc}" ${thumbFallback} class="card-thumb" alt="${name}" style="height:112px; width:auto; object-fit:contain;"/>
+        <div>
+          <div class="card-name">${name}</div>
+          ${c.set_name ? `<div class="card-set">${c.set_name}</div>` : ''}
+          ${c.card_number ? `<div class="card-number">#${c.card_number}</div>` : ''}
+          <div class="types">
+            ${types.map(t => `<span class="type-badge type-${t}">${t}</span>`).join('')}
+          </div>
+        </div>
+      </div>
+      <hr/>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <div class="stat-label">HP</div>
+          <div class="stat-value">${c.hp || '—'}</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Card Type</div>
+          <div class="stat-value" style="font-size:0.9rem">${c.supertype || 'Pokémon'}</div>
+        </div>
+        <div class="stat-item" style="grid-column:1/-1">
+          <div class="stat-label">Rarity</div>
+          <div class="stat-value rarity-display">
+            <span style="color:${rarityColor(rarity)}">${rarityIcon(rarity)}</span>
+            <span style="font-size:0.95rem; color:${rarityColor(rarity)}">${rarity}</span>
+          </div>
+        </div>
+        ${c.artist ? `
+        <div class="stat-item" style="grid-column:1/-1">
+          <div class="stat-label">Illustrator</div>
+          <div class="stat-value" style="font-size:0.88rem; font-weight:500">${c.artist}</div>
+        </div>` : ''}
+      </div>
+      <hr/>
+      <div class="prices-section">
+        <div class="prices-title">💰 Estimated Market Price (USD)</div>
+        <div class="price-grid">
+          <div class="price-item" style="grid-column:1/-1">
+            <div class="price-condition">Market Estimate</div>
+            <div class="price-value">${c.market_price_usd ? '$' + Number(c.market_price_usd).toFixed(2) : '<span class="no-price">Unknown</span>'}</div>
+            ${c.price_note ? `<div style="font-size:0.75rem; color:#666; margin-top:4px">${c.price_note}</div>` : ''}
+          </div>
+        </div>
+      </div>
+      <a href="${tcgUrl}" target="_blank" class="tcg-link">🔗 Search on TCGPlayer ↗</a>
+      <p style="font-size:0.72rem; color:#444; margin-top:-4px">Price is Claude's estimate — check TCGPlayer for live pricing</p>
+    `;
+
+    result.innerHTML = html;
+    result.style.display = 'flex';
+  }
+  // Register service worker for PWA / offline support
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    });
+  }
+</script>
+</body>
+</html>
