@@ -840,8 +840,10 @@ Output raw JSON only.`;
         return;
       }
 
-      const thumb = await cropImage(capturedDataUrl, cardInfo.crop);
-      showCardResult(cardInfo, thumb);
+      showLoading('🔎 Looking up real card data...');
+      const tcgCard = await fetchTCGCard(cardInfo);
+      const thumb = tcgCard?.images?.small || await cropImage(capturedDataUrl, cardInfo.crop);
+      showCardResult(cardInfo, thumb, tcgCard);
 
     } catch (e) {
       showError('Identification Failed', e.message);
@@ -884,6 +886,54 @@ Output raw JSON only.`;
       };
       img.src = dataUrl;
     });
+  }
+
+  // ── Pokémon TCG API lookup ──────────────────────────────
+  async function fetchTCGCard(cardInfo) {
+    try {
+      const name = cardInfo.card_name || cardInfo.pokemon_name;
+      if (!name) return null;
+
+      // Build queries from most specific to least specific
+      const queries = [];
+
+      // 1. Name + number
+      if (cardInfo.card_number) {
+        const num = cardInfo.card_number.split('/')[0].trim();
+        queries.push(`name:"${name}" number:${num}`);
+      }
+      // 2. Name only
+      queries.push(`name:"${name}"`);
+      // 3. Base pokemon name if different
+      if (cardInfo.pokemon_name && cardInfo.pokemon_name !== name) {
+        queries.push(`name:"${cardInfo.pokemon_name}"`);
+      }
+
+      for (const q of queries) {
+        const url = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(q)}&orderBy=-set.releaseDate&pageSize=8`;
+        const res = await fetch(url);
+        if (!res.ok) continue;
+        const data = await res.json();
+        if (!data.data?.length) continue;
+
+        // If multiple results, try to match set name
+        if (data.data.length > 1 && cardInfo.set_name) {
+          const setLower = cardInfo.set_name.toLowerCase();
+          const setMatch = data.data.find(c =>
+            c.set?.name?.toLowerCase().includes(setLower) ||
+            setLower.includes(c.set?.name?.toLowerCase())
+          );
+          if (setMatch) return setMatch;
+        }
+
+        return data.data[0];
+      }
+
+      return null;
+    } catch (e) {
+      console.warn('TCG API lookup failed:', e);
+      return null;
+    }
   }
 
   // ── UI Helpers ─────────────────────────────────────────
@@ -929,8 +979,8 @@ Output raw JSON only.`;
   // ── Multi-card results (ready for multiple cards later) ──
   let cardResults = [];
 
-  function showCardResult(c, thumb) {
-    cardResults = [{ c, thumb }];
+  function showCardResult(c, thumb, tcgCard) {
+    cardResults = [{ c, thumb, tcgCard }];
     renderResults();
   }
 
@@ -939,16 +989,16 @@ Output raw JSON only.`;
     document.getElementById('emptyState').style.display = 'none';
     document.getElementById('errorState').style.display = 'none';
     const result = document.getElementById('cardResult');
-    result.innerHTML = cardResults.map(({ c, thumb }) => renderCardItem(c, thumb)).join('');
+    result.innerHTML = cardResults.map(({ c, thumb, tcgCard }) => renderCardItem(c, thumb, tcgCard)).join('');
     result.style.display = 'flex';
   }
 
-  function renderCardItem(c, thumb) {
-    const name = c.card_name || c.pokemon_name || 'Unknown';
+  function renderCardItem(c, thumb, tcgCard) {
+    const name = tcgCard?.name || c.card_name || c.pokemon_name || 'Unknown';
     const types = Array.isArray(c.types) ? c.types : (c.types ? [c.types] : []);
-    const rarity = c.rarity || 'Unknown';
+    const rarity = tcgCard?.rarity || c.rarity || 'Unknown';
     const attacks = Array.isArray(c.attacks) ? c.attacks : [];
-    const tcgUrl = c.tcgplayer_search ||
+    const tcgUrl = tcgCard?.tcgplayer?.url ||
       `https://www.tcgplayer.com/search/pokemon/product?q=${encodeURIComponent(name)}&view=grid`;
 
     const row = (label, val) => val
@@ -967,24 +1017,56 @@ Output raw JSON only.`;
           <div class="attack-damage">${a.damage || ''}</div>
         </div>`).join('')}` : '';
 
-    const priceHtml = c.market_price_usd
-      ? `<div class="price-box">
-          <div>
-            <div class="price-box-label">💰 Market Price Est.</div>
-            ${c.price_note ? `<div class="price-box-note">${c.price_note}</div>` : ''}
-          </div>
-          <div class="price-box-right">
-            <div class="price-box-amount">$${Number(c.market_price_usd).toFixed(2)}</div>
-            <div class="price-box-note" style="margin-top:4px">Claude's estimate</div>
-          </div>
-        </div>`
-      : `<div class="price-box">
-          <div class="price-box-label">💰 Market Price Est.</div>
-          <div class="price-box-right">
-            <div class="price-box-amount" style="font-size:1.1rem;color:#555">—</div>
-            ${c.price_note ? `<div class="price-box-note">${c.price_note}</div>` : ''}
-          </div>
-        </div>`;
+    // Build price HTML — prefer real TCGPlayer data from pokemontcg.io
+    let priceHtml = '';
+    const tcgPrices = tcgCard?.tcgplayer?.prices;
+    if (tcgPrices) {
+      const priceTypes = Object.entries(tcgPrices)
+        .filter(([, v]) => v?.market != null)
+        .map(([type, v]) => {
+          const label = type
+            .replace(/([A-Z])/g, ' $1')
+            .replace(/^./, s => s.toUpperCase())
+            .trim();
+          return `<div class="price-item">
+            <div class="price-condition">${label}</div>
+            <div class="price-value">$${Number(v.market).toFixed(2)}</div>
+          </div>`;
+        });
+
+      if (priceTypes.length) {
+        const updatedAt = tcgCard.tcgplayer.updatedAt
+          ? `<div class="price-box-note" style="margin-top:4px">Updated ${tcgCard.tcgplayer.updatedAt}</div>` : '';
+        priceHtml = `
+          <div class="prices-section">
+            <div class="prices-title">💰 TCGPlayer Market Prices</div>
+            <div class="price-grid">${priceTypes.join('')}</div>
+            ${updatedAt}
+          </div>`;
+      }
+    }
+
+    // Fallback to Claude's estimate if no TCG prices found
+    if (!priceHtml) {
+      priceHtml = c.market_price_usd
+        ? `<div class="price-box">
+            <div>
+              <div class="price-box-label">💰 Market Price Est.</div>
+              ${c.price_note ? `<div class="price-box-note">${c.price_note}</div>` : ''}
+            </div>
+            <div class="price-box-right">
+              <div class="price-box-amount">$${Number(c.market_price_usd).toFixed(2)}</div>
+              <div class="price-box-note" style="margin-top:4px">Claude's estimate</div>
+            </div>
+          </div>`
+        : `<div class="price-box">
+            <div class="price-box-label">💰 Price</div>
+            <div class="price-box-right">
+              <div class="price-box-amount" style="font-size:1.1rem;color:#555">—</div>
+              ${c.price_note ? `<div class="price-box-note">${c.price_note}</div>` : ''}
+            </div>
+          </div>`;
+    }
 
     return `<div class="card-result-item">
       <div class="card-header">
@@ -992,7 +1074,7 @@ Output raw JSON only.`;
           style="height:110px;width:auto;object-fit:contain;border-radius:6px;flex-shrink:0"/>
         <div style="flex:1;min-width:0">
           <div class="card-name">${name}</div>
-          ${c.set_name ? `<div class="card-set">${c.set_name}${c.card_number ? ' · #' + c.card_number : ''}</div>` : ''}
+          ${(tcgCard?.set?.name || c.set_name) ? `<div class="card-set">${tcgCard?.set?.name || c.set_name}${(tcgCard?.number || c.card_number) ? ' · #' + (tcgCard?.number || c.card_number) : ''}</div>` : ''}
           <div class="types" style="margin-top:6px">
             ${types.map(t => `<span class="type-badge type-${t}">${t}</span>`).join('')}
           </div>
