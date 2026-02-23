@@ -1,0 +1,13 @@
+# Deployment scripts (may contain tokens)
+deploy.bat
+deploy.sh
+
+# Dev/prototype files
+camera-app.html
+design-preview.html
+camera-pokemon.svg
+pokemon-card-identifier.html
+
+# OS
+.DS_Store
+Thumbs.db
